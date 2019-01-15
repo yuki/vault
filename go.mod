@@ -8,7 +8,7 @@ require (
 	github.com/NYTimes/gziphandler v1.0.1
 	github.com/SAP/go-hdb v0.13.2
 	github.com/SermoDigital/jose v0.0.0-20180104203859-803625baeddc
-	github.com/aliyun/alibaba-cloud-sdk-go v1.50.9+incompatible
+	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20190115111624-9eb207f1002c
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da
 	github.com/armon/go-proxyproto v0.0.0-20180202201750-5b7edb60ff5f
 	github.com/armon/go-radix v1.0.0
