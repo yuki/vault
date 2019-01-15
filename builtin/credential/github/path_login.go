@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/github/v21"
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/helper/policyutil"
 	"github.com/hashicorp/vault/logical"
