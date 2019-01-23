@@ -155,7 +155,6 @@ require (
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529
 	github.com/sirupsen/logrus v1.2.0
 	github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926
-	github.com/tyrannosaurus-becks/aliyun-oss-go-sdk v0.0.0-20180615125516-36bf7aa2f916
 	github.com/ugorji/go v0.0.0-20181012064053-8333dd449516
 	go.etcd.io/etcd v3.3.11+incompatible // indirect
 	go.opencensus.io v0.0.0-20181015183446-1eb9a13c7dd0
