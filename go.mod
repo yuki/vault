@@ -35,7 +35,6 @@ require (
 	github.com/circonus-labs/circonusllhist v0.1.1
 	github.com/cockroachdb/cockroach-go v0.0.0-20181001143604-e0a95dfd547c
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
-	github.com/coreos/etcd v3.3.11+incompatible // indirect
 	github.com/coreos/go-oidc v2.0.0+incompatible
 	github.com/coreos/go-semver v0.2.0
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142
