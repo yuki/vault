@@ -78,7 +78,7 @@ require (
 	github.com/hashicorp/go-multierror v1.0.0
 	github.com/hashicorp/go-plugin v0.0.0-20181030172320-54b6ff97d818
 	github.com/hashicorp/go-retryablehttp v0.5.0
-	github.com/hashicorp/go-rootcerts v0.0.0-20160503143440-6bb64b370b90
+	github.com/hashicorp/go-rootcerts v1.0.0
 	github.com/hashicorp/go-sockaddr v0.0.0-20180320115054-6d291a969b86
 	github.com/hashicorp/go-syslog v0.0.0-20170829120034-326bf4a7f709
 	github.com/hashicorp/go-uuid v1.0.0
