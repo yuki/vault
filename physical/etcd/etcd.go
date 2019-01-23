@@ -7,11 +7,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/coreos/etcd/client"
 	"github.com/coreos/go-semver/semver"
 	"github.com/hashicorp/errwrap"
 	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/physical"
+	"go.etcd.io/etcd/client"
 )
 
 var (
