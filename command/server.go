@@ -1360,6 +1360,27 @@ func (c *ServerCommand) enableDev(core *vault.Core, coreConfig *vault.CoreConfig
 		return nil, err
 	}
 
+	if c.flagDev {
+		req := &logical.Request{
+			Operation:   logical.UpdateOperation,
+			ClientToken: init.RootToken,
+			Path:        "sys/mounts/secret",
+			Data: map[string]interface{}{
+				"type": "kv",
+				"options": map[string]string{
+					"version": "1",
+				},
+			},
+		}
+		resp, err := core.HandleRequest(ctx, req)
+		if err != nil {
+			return nil, errwrap.Wrapf("error enabling default K/V store: {{err}}", err)
+		}
+		if resp.IsError() {
+			return nil, errwrap.Wrapf("failed to enable default K/V store: {{err}}", resp.Error())
+		}
+	}
+
 	// Upgrade the default K/V store
 	if !c.flagDevLeasedKV && !c.flagDevKVV1 {
 		req := &logical.Request{
