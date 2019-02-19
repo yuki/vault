@@ -2109,6 +2109,7 @@ func (ts *TokenStore) handleCreateCommon(ctx context.Context, req *logical.Reque
 		NumUses         int    `mapstructure:"num_uses"`
 		Period          string
 		Type            string `mapstructure:"type"`
+		EntityID        string `mapstructure:"entity_id"`
 	}
 	if err := mapstructure.WeakDecode(req.Data, &data); err != nil {
 		return logical.ErrorResponse(fmt.Sprintf(
@@ -2439,6 +2440,24 @@ func (ts *TokenStore) handleCreateCommon(ctx context.Context, req *logical.Reque
 		if role == nil {
 			te.BoundCIDRs = parent.BoundCIDRs
 		}
+	}
+
+	// It is allowed to overwrite the corresponding entity of a token.
+	// This is only possible when client token has sudo/root.
+	if data.EntityID != "" && ts.core.identityStore != nil {
+		if !isSudo {
+			return logical.ErrorResponse("root or sudo privileges required to specify entity id "), logical.ErrInvalidRequest
+		}
+		entity, err := ts.core.identityStore.MemDBEntityByID(data.EntityID, false)
+		if err != nil {
+			return logical.ErrorResponse(err.Error()), logical.ErrInvalidRequest
+		}
+		if entity == nil {
+			return logical.ErrorResponse("cannot find entity with given entity id"), logical.ErrInvalidRequest
+		}
+
+		// Entity is valid.
+		te.EntityID = data.EntityID
 	}
 
 	var explicitMaxTTLToUse time.Duration

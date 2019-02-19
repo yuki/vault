@@ -29,6 +29,7 @@ type TokenCreateCommand struct {
 	flagType            string
 	flagMetadata        map[string]string
 	flagPolicies        []string
+	flagEntityID        string
 }
 
 func (c *TokenCreateCommand) Synopsis() string {
@@ -176,6 +177,14 @@ func (c *TokenCreateCommand) Flags() *FlagSets {
 			"specified multiple times to attach multiple policies.",
 	})
 
+	f.StringVar(&StringVar{
+		Name:    "entity-id",
+		Target:  &c.flagEntityID,
+		Default: "",
+		Usage: "The id of the entity which will be set for this token. " +
+			"If set, parent token entity and group policies are not inherited.",
+	})
+
 	return set
 }
 
@@ -224,6 +233,7 @@ func (c *TokenCreateCommand) Run(args []string) int {
 		ExplicitMaxTTL:  c.flagExplicitMaxTTL.String(),
 		Period:          c.flagPeriod.String(),
 		Type:            c.flagType,
+		EntityID:        c.flagEntityID,
 	}
 
 	var secret *api.Secret
