@@ -2637,6 +2637,78 @@ func TestTokenStore_HandleRequest_RenewSelf(t *testing.T) {
 	}
 }
 
+func TestTokenStore_HandleRequest_CreateToken_EntityID(t *testing.T) {
+	core, _, root := TestCoreUnsealed(t)
+	i := core.identityStore
+	ctx := namespace.RootContext(nil)
+	policyName := "test1"
+
+	// Create an entity
+	resp, err := i.HandleRequest(ctx, &logical.Request{
+		Path:      "entity",
+		Operation: logical.UpdateOperation,
+		Data: map[string]interface{}{
+			"name":     "testentity",
+			"policies": []string{policyName},
+		},
+	})
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("bad: err:%v\nresp: %#v", err, resp)
+	}
+	entityID := resp.Data["id"].(string)
+
+	req := logical.Request{
+		Path:        "auth/token/create",
+		Operation:   logical.UpdateOperation,
+		ClientToken: root,
+		Data: map[string]interface{}{
+			"entity_id": entityID,
+		},
+	}
+
+	resp, err = core.HandleRequest(ctx, &req)
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("err: %v\nresp: %#v", err, resp)
+	}
+	if resp == nil {
+		t.Fatalf("expected a response")
+	}
+	if resp.Auth.EntityID != entityID {
+		t.Fatalf("expected '%s' got '%s'", entityID, resp.Auth.EntityID)
+	}
+	policyFound := false
+	for _, policy := range resp.Auth.IdentityPolicies {
+		if policy == policyName {
+			policyFound = true
+		}
+	}
+	if !policyFound {
+		t.Fatalf("Policy '%s' not derived by entity but should be. Auth: %#v", policyName, resp.Auth)
+	}
+}
+
+func TestTokenStore_HandleRequest_CreateToken_EntityID_NonRoot(t *testing.T) {
+	core, _, root := TestCoreUnsealed(t)
+	ts := core.tokenStore
+	ctx := namespace.RootContext(nil)
+
+	testMakeServiceTokenViaBackend(t, ts, root, "client", "", []string{"foo"})
+	req := logical.TestRequest(t, logical.UpdateOperation, "create")
+	req.ClientToken = "client"
+	req.Data["entity_id"] = "new-entity-id"
+
+	resp, _ := ts.HandleRequest(ctx, req)
+	/*if err != nil {
+		t.Fatalf("err: %v", err)
+	}*/
+	if resp == nil || resp.Data == nil {
+		t.Fatalf("expected a response with data")
+	}
+	if resp.Data["error"] != "root or sudo privileges required to specify entity id" {
+		t.Fatalf("wrong error returned. Err:%s", resp.Data["error"])
+	}
+}
+
 func TestTokenStore_RoleCRUD(t *testing.T) {
 	core, _, root := TestCoreUnsealed(t)
 
