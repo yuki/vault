@@ -64,8 +64,7 @@ type LockManager struct {
 func NewLockManager(cacheDisabled bool) *LockManager {
 	lm := &LockManager{
 		useCache:  !cacheDisabled,
-		cacheType: SyncMap,
-		cache:     NewTransitSyncMap(),
+		cacheType: NotInitialized,
 		keyLocks:  locksutil.CreateLocks(),
 		lock:      sync.RWMutex{},
 	}
@@ -235,7 +234,7 @@ func (lm *LockManager) BackupPolicy(ctx context.Context, storage logical.Storage
 	lm.lock.RLock()
 	defer lm.lock.RUnlock()
 
-	// Backup writes information about when the bacup took place, so we get an
+	// Backup writes information about when the backup took place, so we get an
 	// exclusive lock here
 	lock := locksutil.LockForKey(lm.keyLocks, name)
 	lock.Lock()

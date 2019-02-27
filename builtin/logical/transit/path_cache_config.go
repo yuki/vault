@@ -92,7 +92,24 @@ func (b *backend) pathCacheConfigWrite(ctx context.Context, req *logical.Request
 		}
 	}
 
+	// store cache type
+	entry, err := logical.StorageEntryJSON("config/cache-type", &configCacheType{
+		cacheType: cacheType,
+		size:      cacheSize,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := req.Storage.Put(ctx, entry); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
+}
+
+type configCacheType struct {
+	cacheType keysutil.CacheType
+	size      int
 }
 
 func (b *backend) pathCacheConfigRead(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
@@ -112,7 +129,7 @@ func (b *backend) pathCacheConfigRead(ctx context.Context, req *logical.Request,
 			"cache-max-size": b.lm.GetCacheSize(),
 		},
 	}
-
+	req.lo
 	return resp, nil
 }
 

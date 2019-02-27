@@ -3,7 +3,8 @@ package keysutil
 type CacheType int
 
 const (
-	NotImplemented CacheType = iota
+	NotInitialized CacheType = iota
+	NotImplemented
 	SyncMap
 	LRU
 )
