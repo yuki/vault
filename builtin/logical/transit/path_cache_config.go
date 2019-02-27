@@ -129,7 +129,7 @@ func (b *backend) pathCacheConfigRead(ctx context.Context, req *logical.Request,
 			"cache-max-size": b.lm.GetCacheSize(),
 		},
 	}
-	req.lo
+
 	return resp, nil
 }
 
