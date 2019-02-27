@@ -3,6 +3,7 @@ package transit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/hashicorp/vault/helper/keysutil"
@@ -70,7 +71,10 @@ type backend struct {
 // initializeCache initializes a transit's cache
 func (b *backend) initializeCache(ctx context.Context, s logical.Storage) error {
 	// check storage
-	entry, _ := s.Get(ctx, "config/cache-type")
+	fmt.Println("-- REACHED INITIALIZE CACHE --")
+	entry, error := s.Get(ctx, "config/cache-type")
+	fmt.Printf("entry:%v", entry)
+	fmt.Printf("error:%v", error)
 	if entry == nil {
 		// if nothing is in storage, default to a syncmap
 		b.lm.ConvertCacheToSyncmap()
@@ -81,6 +85,7 @@ func (b *backend) initializeCache(ctx context.Context, s logical.Storage) error 
 	if err := entry.DecodeJSON(&storedCacheType); err != nil {
 		return err
 	}
+	fmt.Printf("storedCacheType:%v", storedCacheType)
 	switch storedCacheType.cacheType {
 	case keysutil.SyncMap:
 		b.lm.ConvertCacheToSyncmap()
