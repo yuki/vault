@@ -82,13 +82,6 @@ func pathRoles(b *databaseBackend) *framework.Path {
 				Description: `Name of the static user account for Vault to manage.
 				Requires "rotation_period" to be specified`,
 			},
-			// TODO: verify if we should support this as input and use it to verify
-			// credentials before assuming managment of an account.
-			// "password": {
-			// 	Type:        framework.TypeString,
-			// 	Description: "Password of the static user account for Vault to manage.
-			// 	Not used yet",
-			// },
 			"rotation_period": {
 				Type: framework.TypeDurationSecond,
 				Description: `Period for automatic credential rotation of the given
