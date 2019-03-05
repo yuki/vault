@@ -26,6 +26,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/mitchellh/mapstructure"
 	"github.com/ory/dockertest"
+	"github.com/y0ssar1an/q"
 )
 
 var (
@@ -1375,6 +1376,93 @@ func TestBackend_RotateRootCredentials(t *testing.T) {
 	if err != nil || (credsResp != nil && credsResp.IsError()) {
 		t.Fatalf("err:%s resp:%#v\n", err, credsResp)
 	}
+}
+
+func TestBackend_PeriodicFunc(t *testing.T) {
+	cluster, sys := getCluster(t)
+	defer cluster.Cleanup()
+
+	config := logical.TestBackendConfig()
+	config.StorageView = &logical.InmemStorage{}
+	config.System = sys
+
+	b, err := Factory(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Cleanup(context.Background())
+
+	bd := b.(*databaseBackend)
+	if bd.credRotationQueue == nil {
+		t.Fatal("database backend had no credential rotation queue")
+	}
+	if bd.Backend.PeriodicFunc == nil {
+		t.Fatal("expected database backend to have PeriodicFunc")
+	}
+
+	// configure backend, add item and confirm length
+	cleanup, connURL := preparePostgresTestContainer(t, config.StorageView, b)
+	defer cleanup()
+
+	// Configure a connection
+	data := map[string]interface{}{
+		"connection_url":    connURL,
+		"plugin_name":       "postgresql-database-plugin",
+		"verify_connection": false,
+		"allowed_roles":     []string{"*"},
+		"name":              "plugin-test",
+	}
+	req := &logical.Request{
+		Operation: logical.UpdateOperation,
+		Path:      "config/plugin-test",
+		Storage:   config.StorageView,
+		Data:      data,
+	}
+	resp, err := b.HandleRequest(namespace.RootContext(nil), req)
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("err:%s resp:%#v\n", err, resp)
+	}
+
+	// create three static roles with different rotation periods
+	for _, v := range []string{"65", "130", "5400"} {
+		roleName := "plugin-static-role-" + v
+		data = map[string]interface{}{
+			"name":                  roleName,
+			"db_name":               "plugin-test",
+			"creation_statements":   testRoleStaticCreate,
+			"rotation_statements":   testRoleStaticUpdate,
+			"revocation_statements": defaultRevocationSQL,
+			"username":              "statictest" + v,
+			"rotation_period":       v,
+		}
+
+		req = &logical.Request{
+			Operation: logical.CreateOperation,
+			Path:      "roles/" + roleName,
+			Storage:   config.StorageView,
+			Data:      data,
+		}
+
+		resp, err = b.HandleRequest(namespace.RootContext(nil), req)
+		if err != nil || (resp != nil && resp.IsError()) {
+			t.Fatalf("err:%s resp:%#v\n", err, resp)
+		}
+	}
+
+	// Read the role
+	// data = map[string]interface{}{}
+	// req = &logical.Request{
+	// 	Operation: logical.ReadOperation,
+	// 	Path:      "roles/plugin-static-role",
+	// 	Storage:   config.StorageView,
+	// 	Data:      data,
+	// }
+	// resp, err = b.HandleRequest(namespace.RootContext(nil), req)
+	// if err != nil || (resp != nil && resp.IsError()) {
+	// 	t.Fatalf("err:%s resp:%#v\n", err, resp)
+	// }
+
+	q.Q("len:", bd.credRotationQueue.Len())
 }
 
 func testCredsExist(t *testing.T, resp *logical.Response, connURL string) bool {

@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/vault/helper/namespace"
 	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/logical/framework"
-	"github.com/y0ssar1an/q"
 )
 
 var dataKeys = []string{"username", "password", "last_vault_rotation", "rotation_period"}
@@ -432,7 +431,6 @@ func TestBackend_StaticRole_RoleUpgrade_Check(t *testing.T) {
 	if err != nil || (resp != nil && resp.IsError()) {
 		t.Fatalf("err:%s resp:%#v\n", err, resp)
 	}
-	q.Q("data:", resp.Data)
 	if _, ok := resp.Data["static_account"]; ok {
 		t.Fatalf("expected no static account, got: %#v", resp.Data["static_account"])
 	}
