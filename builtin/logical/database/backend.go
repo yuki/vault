@@ -81,11 +81,11 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 		Secrets: []*framework.Secret{
 			secretCreds(&b),
 		},
-		Clean:             b.clean,
-		Invalidate:        b.invalidate,
-		BackendType:       logical.TypeLogical,
-		WALRollback:       b.walRollback,
-		WALRollbackMinAge: 2 * time.Minute,
+		Clean:       b.clean,
+		Invalidate:  b.invalidate,
+		BackendType: logical.TypeLogical,
+		// WALRollback:       b.walRollback,
+		// WALRollbackMinAge: 2 * time.Minute,
 	}
 
 	b.logger = conf.Logger
@@ -124,22 +124,28 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 
 				// TODO: load role and don't just use the value
 				role := item.Value.(*roleEntry)
-
 				if time.Now().Unix() > item.Priority {
 					// We've found our first item not in need of rotation
 					if err := b.createUpdateStaticAccount(ctx, req.Storage, item.Key, role, false); err != nil {
 						b.logger.Warn("unable rotate credentials in periodic function", "error", err)
 						// add the item to the re-queue slice
 						reQueue = append(reQueue, item)
+						continue
 					}
-					b.credRotationQueue.PushItem(&queue.Item{
+					newPriority := role.StaticAccount.LastVaultRotation.Add(role.StaticAccount.RotationPeriod)
+					newItem := queue.Item{
 						Key:      item.Key,
 						Value:    role,
-						Priority: time.Now().Add(role.StaticAccount.RotationPeriod).Unix(),
-					})
+						Priority: newPriority.Unix(),
+					}
+					if err := b.credRotationQueue.PushItem(&newItem); err != nil {
+						b.logger.Warn("unable to push item on to queue", "error", err)
+					}
 				} else {
+					// highest priority item does not need rotation, so we push it back on
+					// the queue and break the loop
 					b.credRotationQueue.PushItem(item)
-					return nil
+					break
 				}
 			}
 

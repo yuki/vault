@@ -26,7 +26,6 @@ import (
 	"github.com/lib/pq"
 	"github.com/mitchellh/mapstructure"
 	"github.com/ory/dockertest"
-	"github.com/y0ssar1an/q"
 )
 
 var (
@@ -1424,16 +1423,17 @@ func TestBackend_PeriodicFunc(t *testing.T) {
 	}
 
 	// create three static roles with different rotation periods
-	for _, v := range []string{"65", "130", "5400"} {
-		roleName := "plugin-static-role-" + v
+	testCases := []string{"65", "130", "5400"}
+	for _, tc := range testCases {
+		roleName := "plugin-static-role-" + tc
 		data = map[string]interface{}{
 			"name":                  roleName,
 			"db_name":               "plugin-test",
 			"creation_statements":   testRoleStaticCreate,
 			"rotation_statements":   testRoleStaticUpdate,
 			"revocation_statements": defaultRevocationSQL,
-			"username":              "statictest" + v,
-			"rotation_period":       v,
+			"username":              "statictest" + tc,
+			"rotation_period":       tc,
 		}
 
 		req = &logical.Request{
@@ -1449,20 +1449,128 @@ func TestBackend_PeriodicFunc(t *testing.T) {
 		}
 	}
 
-	// Read the role
-	// data = map[string]interface{}{}
-	// req = &logical.Request{
-	// 	Operation: logical.ReadOperation,
-	// 	Path:      "roles/plugin-static-role",
-	// 	Storage:   config.StorageView,
-	// 	Data:      data,
-	// }
-	// resp, err = b.HandleRequest(namespace.RootContext(nil), req)
-	// if err != nil || (resp != nil && resp.IsError()) {
-	// 	t.Fatalf("err:%s resp:%#v\n", err, resp)
-	// }
+	if bd.credRotationQueue.Len() != 3 {
+		t.Fatalf("expected 3 items in the rotation queue, got: (%d)", bd.credRotationQueue.Len())
+	}
 
-	q.Q("len:", bd.credRotationQueue.Len())
+	// List the roles
+	data = map[string]interface{}{}
+	req = &logical.Request{
+		Operation: logical.ListOperation,
+		Path:      "roles/",
+		Storage:   config.StorageView,
+		Data:      data,
+	}
+	resp, err = b.HandleRequest(namespace.RootContext(nil), req)
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("err:%s resp:%#v\n", err, resp)
+	}
+	keys := resp.Data["keys"].([]string)
+	if len(keys) != 3 {
+		t.Fatalf("expected 3 roles, got: (%d)", len(keys))
+	}
+
+	// initial capture passwords
+	pws := capturePasswords(t, b, config, testCases)
+	time.Sleep(7 * time.Second)
+
+	// manuall tick the periodicFunc
+	ticker := time.NewTicker(60 * time.Second)
+	quit := make(chan struct{})
+	// quit the goroutine
+	defer func() {
+		close(quit)
+	}()
+	go func() {
+		//periodic req
+		prReq := &logical.Request{
+			Storage: config.StorageView,
+		}
+		for {
+			select {
+			case <-ticker.C:
+				bd.PeriodicFunc(context.Background(), prReq)
+			case <-quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+	// sleep 70 to make sure the periodic func has time to actually run
+	time.Sleep(75 * time.Second)
+	pws2 := capturePasswords(t, b, config, testCases)
+	for k, v := range pws2 {
+		pws[k] = append(pws[k], v...)
+	}
+
+	// sleep more, this should allow both sr65 and sr130 to rotate
+	time.Sleep(140 * time.Second)
+	pws3 := capturePasswords(t, b, config, testCases)
+	for k, v := range pws3 {
+		pws[k] = append(pws[k], v...)
+	}
+
+	// verify all pws are as they should
+	pass := true
+	for k, v := range pws {
+		switch {
+		case k == "plugin-static-role-65":
+			// expect all passwords to be different
+			if v[0] == v[1] || v[1] == v[2] || v[0] == v[2] {
+				pass = false
+			}
+		case k == "plugin-static-role-130":
+			// expect the first two to be equal, but different from the third
+			if v[0] != v[1] || v[0] == v[2] {
+				pass = false
+			}
+		case k == "plugin-static-role-5400":
+			// expect all passwords to be equal
+			if v[0] != v[1] || v[1] != v[2] {
+				pass = false
+			}
+		}
+	}
+	if !pass {
+		t.Fatalf("password rotations did not match expected: %#v", pws)
+	}
+}
+
+// staticRoleTest is used to capture before/after rotation information
+type testCase struct {
+	RoleName              string
+	Period                int
+	OriginalPassword      string
+	RotatedPassword       string
+	OriginalLastVaultTime time.Time
+	RotatedLastVaultTime  time.Time
+}
+
+// capture the current passwords
+func capturePasswords(t *testing.T, b logical.Backend, config *logical.BackendConfig, testCases []string) map[string][]string {
+	pws := make(map[string][]string, 0)
+	for _, tc := range testCases {
+		// Read the role
+		roleName := "plugin-static-role-" + tc
+		req := &logical.Request{
+			Operation: logical.ReadOperation,
+			Path:      "creds/" + roleName,
+			Storage:   config.StorageView,
+		}
+		resp, err := b.HandleRequest(namespace.RootContext(nil), req)
+		if err != nil || (resp != nil && resp.IsError()) {
+			t.Fatalf("err:%s resp:%#v\n", err, resp)
+		}
+
+		username := resp.Data["username"].(string)
+		password := resp.Data["password"].(string)
+		if username == "" || password == "" {
+			t.Fatalf("expected both username/password for (%s), got (%s), (%s)", roleName, username, password)
+		}
+		pws[roleName] = append(pws[roleName], password)
+	}
+
+	return pws
 }
 
 func testCredsExist(t *testing.T, resp *logical.Response, connURL string) bool {
