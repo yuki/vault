@@ -1536,16 +1536,6 @@ func TestBackend_PeriodicFunc(t *testing.T) {
 	}
 }
 
-// staticRoleTest is used to capture before/after rotation information
-type testCase struct {
-	RoleName              string
-	Period                int
-	OriginalPassword      string
-	RotatedPassword       string
-	OriginalLastVaultTime time.Time
-	RotatedLastVaultTime  time.Time
-}
-
 // capture the current passwords
 func capturePasswords(t *testing.T, b logical.Backend, config *logical.BackendConfig, testCases []string) map[string][]string {
 	pws := make(map[string][]string, 0)

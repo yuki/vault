@@ -84,8 +84,6 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 		Clean:       b.clean,
 		Invalidate:  b.invalidate,
 		BackendType: logical.TypeLogical,
-		// WALRollback:       b.walRollback,
-		// WALRollbackMinAge: 2 * time.Minute,
 	}
 
 	b.logger = conf.Logger
