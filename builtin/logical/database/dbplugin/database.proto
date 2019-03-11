@@ -21,7 +21,6 @@ message CreateUserRequest {
 	Statements     statements = 1;
 	UsernameConfig username_config = 2;
 	google.protobuf.Timestamp expiration = 3;
-}
 
 message GenerateCredentialsResponse {
   string password = 1;

@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -392,8 +393,6 @@ func (b *databaseBackend) pathRoleCreateUpdate(ctx context.Context, req *logical
 }
 
 func (b *databaseBackend) createUpdateStaticAccount(ctx context.Context, s logical.Storage, name string, role *roleEntry, createUser bool) error {
-	var password string
-
 	dbConfig, err := b.DatabaseConfig(ctx, s, role.DBName)
 	if err != nil {
 		return err
@@ -410,13 +409,19 @@ func (b *databaseBackend) createUpdateStaticAccount(ctx context.Context, s logic
 	if err != nil {
 		return err
 	}
-	// branch for static account around here
+
+	// Generate a new password
+	password, err := db.GenerateCredentials(ctx)
+	if err != nil {
+		return err
+	}
 
 	db.RLock()
 	defer db.RUnlock()
 
 	config := dbplugin.StaticUserConfig{
 		Username: role.StaticAccount.Username,
+		Password: password,
 	}
 
 	// Create or rotate the user
@@ -426,10 +431,15 @@ func (b *databaseBackend) createUpdateStaticAccount(ctx context.Context, s logic
 	}
 
 	var sterr error
-	_, password, _, sterr = db.SetCredentials(ctx, config, stmts)
+	_, newPassword, _, sterr := db.SetCredentials(ctx, config, stmts)
 	if sterr != nil {
 		b.CloseIfShutdown(db, sterr)
 		return sterr
+	}
+
+	// TODO set credentials doesn't need to return all these things
+	if newPassword != password {
+		return errors.New("mismatch password returned")
 	}
 
 	// Store updated role information
