@@ -1449,6 +1449,7 @@ func TestBackend_PeriodicFunc(t *testing.T) {
 		}
 	}
 
+	// verify the queue has 3 items in it
 	if bd.credRotationQueue.Len() != 3 {
 		t.Fatalf("expected 3 items in the rotation queue, got: (%d)", bd.credRotationQueue.Len())
 	}
@@ -1470,14 +1471,18 @@ func TestBackend_PeriodicFunc(t *testing.T) {
 		t.Fatalf("expected 3 roles, got: (%d)", len(keys))
 	}
 
-	// initial capture passwords
-	pws := capturePasswords(t, b, config, testCases)
+	// capture initial passwords, before the periodic function is triggered
+	pws := make(map[string][]string, 0)
+	pws = capturePasswords(t, b, config, testCases, pws)
+
+	// sleep to make sure the 65s role will be up for rotation by the time the
+	// periodic function ticks
 	time.Sleep(7 * time.Second)
 
-	// manuall tick the periodicFunc
+	// manually tick the periodicFunc
 	ticker := time.NewTicker(60 * time.Second)
 	quit := make(chan struct{})
-	// quit the goroutine
+	// quit the go-routine
 	defer func() {
 		close(quit)
 	}()
@@ -1496,19 +1501,13 @@ func TestBackend_PeriodicFunc(t *testing.T) {
 			}
 		}
 	}()
-	// sleep 70 to make sure the periodic func has time to actually run
+	// sleep 75 to make sure the periodic func has time to actually run
 	time.Sleep(75 * time.Second)
-	pws2 := capturePasswords(t, b, config, testCases)
-	for k, v := range pws2 {
-		pws[k] = append(pws[k], v...)
-	}
+	pws = capturePasswords(t, b, config, testCases, pws)
 
 	// sleep more, this should allow both sr65 and sr130 to rotate
 	time.Sleep(140 * time.Second)
-	pws3 := capturePasswords(t, b, config, testCases)
-	for k, v := range pws3 {
-		pws[k] = append(pws[k], v...)
-	}
+	pws = capturePasswords(t, b, config, testCases, pws)
 
 	// verify all pws are as they should
 	pass := true
@@ -1537,8 +1536,8 @@ func TestBackend_PeriodicFunc(t *testing.T) {
 }
 
 // capture the current passwords
-func capturePasswords(t *testing.T, b logical.Backend, config *logical.BackendConfig, testCases []string) map[string][]string {
-	pws := make(map[string][]string, 0)
+func capturePasswords(t *testing.T, b logical.Backend, config *logical.BackendConfig, testCases []string, pws map[string][]string) map[string][]string {
+	new := make(map[string][]string, 0)
 	for _, tc := range testCases {
 		// Read the role
 		roleName := "plugin-static-role-" + tc
@@ -1557,7 +1556,11 @@ func capturePasswords(t *testing.T, b logical.Backend, config *logical.BackendCo
 		if username == "" || password == "" {
 			t.Fatalf("expected both username/password for (%s), got (%s), (%s)", roleName, username, password)
 		}
-		pws[roleName] = append(pws[roleName], password)
+		new[roleName] = append(new[roleName], password)
+	}
+
+	for k, v := range new {
+		pws[k] = append(pws[k], v...)
 	}
 
 	return pws
