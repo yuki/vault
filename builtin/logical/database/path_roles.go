@@ -369,8 +369,8 @@ func (b *databaseBackend) pathRoleCreateUpdate(ctx context.Context, req *logical
 
 			// Add their rotation to the queue
 			if err := b.credRotationQueue.PushItem(&queue.Item{
-				Key:      name,
-				Value:    role, // TODO is this what needs to be here?
+				Key: name,
+				// Value may be WAL ID if it exists
 				Priority: time.Now().Add(role.StaticAccount.RotationPeriod).Unix(),
 			}); err != nil {
 				// TODO rollback?

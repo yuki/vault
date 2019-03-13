@@ -120,8 +120,16 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 					return err
 				}
 
-				// TODO: load role and don't just use the value
-				role := item.Value.(*roleEntry)
+				role, err := b.Role(ctx, req.Storage, item.Key)
+				if err != nil {
+					b.logger.Warn(fmt.Sprintf("unable load role (%s)", item.Key), "error", err)
+					continue
+				}
+				if role == nil {
+					b.logger.Warn(fmt.Sprintf("role (%s) not found", item.Key), "error", err)
+					continue
+				}
+
 				if time.Now().Unix() > item.Priority {
 					// We've found our first item not in need of rotation
 					if err := b.createUpdateStaticAccount(ctx, req.Storage, item.Key, role, false); err != nil {
@@ -132,8 +140,8 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 					}
 					newPriority := role.StaticAccount.LastVaultRotation.Add(role.StaticAccount.RotationPeriod)
 					newItem := queue.Item{
-						Key:      item.Key,
-						Value:    role,
+						Key: item.Key,
+						// Value may be WAL ID if it exists
 						Priority: newPriority.Unix(),
 					}
 					if err := b.credRotationQueue.PushItem(&newItem); err != nil {
@@ -423,7 +431,6 @@ func (b *databaseBackend) populateQueue(ctx context.Context, s logical.Storage) 
 
 		if err := b.credRotationQueue.PushItem(&queue.Item{
 			Key:      roleName,
-			Value:    role,
 			Priority: role.StaticAccount.LastVaultRotation.Add(role.StaticAccount.RotationPeriod).Unix(),
 		}); err != nil {
 			log.Warn("unable to enqueue item", "error", err, "role", roleName)
