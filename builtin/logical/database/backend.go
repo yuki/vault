@@ -107,10 +107,6 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 			// This will loop until either:
 			// - The queue of passwords needing rotation is completely empty.
 			// - It encounters the first password not yet needing rotation.
-
-			// reQueue is a collection of any queue items that failed to rotate, to be
-			// re-added at the end
-			var reQueue []*queue.Item
 			for {
 				item, err := b.credRotationQueue.PopItem()
 				if err != nil {
@@ -132,13 +128,22 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 
 				if time.Now().Unix() > item.Priority {
 					// We've found our first item not in need of rotation
-					if err := b.createUpdateStaticAccount(ctx, req.Storage, item.Key, role, false); err != nil {
+					lvr, err := b.createUpdateStaticAccount(ctx, req.Storage, item.Key, role, false)
+					if err != nil {
 						b.logger.Warn("unable rotate credentials in periodic function", "error", err)
 						// add the item to the re-queue slice
-						reQueue = append(reQueue, item)
+						newItem := queue.Item{
+							Key: item.Key,
+							// Value may be WAL ID if it exists
+							Priority: item.Priority + 10,
+						}
+						if err := b.credRotationQueue.PushItem(&newItem); err != nil {
+							b.logger.Warn("unable to push item on to queue", "error", err)
+						}
+						// go to next item
 						continue
 					}
-					newPriority := role.StaticAccount.LastVaultRotation.Add(role.StaticAccount.RotationPeriod)
+					newPriority := lvr.Add(role.StaticAccount.RotationPeriod)
 					newItem := queue.Item{
 						Key: item.Key,
 						// Value may be WAL ID if it exists
@@ -155,10 +160,6 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 				}
 			}
 
-			// re-enqueue items that failed to rotate
-			for _, item := range reQueue {
-				b.credRotationQueue.PushItem(item)
-			}
 			return nil
 		}
 	}

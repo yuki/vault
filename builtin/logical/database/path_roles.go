@@ -353,7 +353,7 @@ func (b *databaseBackend) pathRoleCreateUpdate(ctx context.Context, req *logical
 	if role.StaticAccount != nil {
 		// in create/update of static accounts, we only care if the operation
 		// err'd , and this call does not return credentials
-		err = b.createUpdateStaticAccount(ctx, req.Storage, name, role, createRole)
+		lvr, err := b.createUpdateStaticAccount(ctx, req.Storage, name, role, createRole)
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +371,7 @@ func (b *databaseBackend) pathRoleCreateUpdate(ctx context.Context, req *logical
 			if err := b.credRotationQueue.PushItem(&queue.Item{
 				Key: name,
 				// Value may be WAL ID if it exists
-				Priority: time.Now().Add(role.StaticAccount.RotationPeriod).Unix(),
+				Priority: lvr.Add(role.StaticAccount.RotationPeriod).Unix(),
 			}); err != nil {
 				// TODO rollback?
 				return nil, err
@@ -392,28 +392,29 @@ func (b *databaseBackend) pathRoleCreateUpdate(ctx context.Context, req *logical
 	return nil, nil
 }
 
-func (b *databaseBackend) createUpdateStaticAccount(ctx context.Context, s logical.Storage, name string, role *roleEntry, createUser bool) error {
+func (b *databaseBackend) createUpdateStaticAccount(ctx context.Context, s logical.Storage, name string, role *roleEntry, createUser bool) (time.Time, error) {
+	var lvr time.Time
 	dbConfig, err := b.DatabaseConfig(ctx, s, role.DBName)
 	if err != nil {
-		return err
+		return lvr, err
 	}
 
 	// If role name isn't in the database's allowed roles, send back a
 	// permission denied.
 	if !strutil.StrListContains(dbConfig.AllowedRoles, "*") && !strutil.StrListContainsGlob(dbConfig.AllowedRoles, name) {
-		return fmt.Errorf("%q is not an allowed role", name)
+		return lvr, fmt.Errorf("%q is not an allowed role", name)
 	}
 
 	// Get the Database object
 	db, err := b.GetConnection(ctx, s, role.DBName)
 	if err != nil {
-		return err
+		return lvr, err
 	}
 
 	// Generate a new password
 	password, err := db.GenerateCredentials(ctx)
 	if err != nil {
-		return err
+		return lvr, err
 	}
 
 	db.RLock()
@@ -434,27 +435,28 @@ func (b *databaseBackend) createUpdateStaticAccount(ctx context.Context, s logic
 	_, newPassword, _, sterr := db.SetCredentials(ctx, config, stmts)
 	if sterr != nil {
 		b.CloseIfShutdown(db, sterr)
-		return sterr
+		return lvr, sterr
 	}
 
 	// TODO set credentials doesn't need to return all these things
 	if newPassword != password {
-		return errors.New("mismatch password returned")
+		return lvr, errors.New("mismatch password returned")
 	}
 
 	// Store updated role information
-	role.StaticAccount.LastVaultRotation = time.Now()
+	lvr = time.Now()
+	role.StaticAccount.LastVaultRotation = lvr
 	role.StaticAccount.Password = password
 
 	entry, err := logical.StorageEntryJSON("role/"+name, role)
 	if err != nil {
-		return err
+		return lvr, err
 	}
 	if err := s.Put(ctx, entry); err != nil {
-		return err
+		return lvr, err
 	}
 
-	return nil
+	return lvr, nil
 }
 
 type roleEntry struct {
