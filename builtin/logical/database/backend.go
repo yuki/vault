@@ -128,13 +128,14 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 
 				if time.Now().Unix() > item.Priority {
 					// We've found our first item not in need of rotation
+
+					// lvr is the roles' last vault rotation
 					lvr, err := b.createUpdateStaticAccount(ctx, req.Storage, item.Key, role, false)
 					if err != nil {
 						b.logger.Warn("unable rotate credentials in periodic function", "error", err)
 						// add the item to the re-queue slice
 						newItem := queue.Item{
-							Key: item.Key,
-							// Value may be WAL ID if it exists
+							Key:      item.Key,
 							Priority: item.Priority + 10,
 						}
 						if err := b.credRotationQueue.PushItem(&newItem); err != nil {
@@ -143,11 +144,11 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 						// go to next item
 						continue
 					}
-					newPriority := lvr.Add(role.StaticAccount.RotationPeriod)
+
+					nextRotation := lvr.Add(role.StaticAccount.RotationPeriod)
 					newItem := queue.Item{
-						Key: item.Key,
-						// Value may be WAL ID if it exists
-						Priority: newPriority.Unix(),
+						Key:      item.Key,
+						Priority: nextRotation.Unix(),
 					}
 					if err := b.credRotationQueue.PushItem(&newItem); err != nil {
 						b.logger.Warn("unable to push item on to queue", "error", err)
@@ -159,7 +160,6 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 					break
 				}
 			}
-
 			return nil
 		}
 	}

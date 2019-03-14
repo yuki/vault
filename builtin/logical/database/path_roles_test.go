@@ -276,6 +276,24 @@ func TestBackend_StaticRole_Updates(t *testing.T) {
 	}
 
 	rotation := resp.Data["rotation_period"].(float64)
+
+	// capture the password to verify it doesn't change
+	req = &logical.Request{
+		Operation: logical.ReadOperation,
+		Path:      "creds/plugin-role-test-updates",
+		Storage:   config.StorageView,
+	}
+	resp, err = b.HandleRequest(namespace.RootContext(nil), req)
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("err:%s resp:%#v\n", err, resp)
+	}
+
+	username := resp.Data["username"].(string)
+	password := resp.Data["password"].(string)
+	if username == "" || password == "" {
+		t.Fatalf("expected both username/password, got (%s), (%s)", username, password)
+	}
+
 	// update rotation_period
 	updateData := map[string]interface{}{
 		"name":            "plugin-role-test-updates",
@@ -311,6 +329,24 @@ func TestBackend_StaticRole_Updates(t *testing.T) {
 	newRotation := resp.Data["rotation_period"].(float64)
 	if newRotation == rotation {
 		t.Fatalf("expected change in rotation, but got old value:  %#v", newRotation)
+	}
+
+	// re-capture the password to ensure it did not change
+	req = &logical.Request{
+		Operation: logical.ReadOperation,
+		Path:      "creds/plugin-role-test-updates",
+		Storage:   config.StorageView,
+	}
+	resp, err = b.HandleRequest(namespace.RootContext(nil), req)
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("err:%s resp:%#v\n", err, resp)
+	}
+
+	if username != resp.Data["username"].(string) {
+		t.Fatalf("usernames dont match!: (%s) / (%s)", username, resp.Data["username"].(string))
+	}
+	if password != resp.Data["password"].(string) {
+		t.Fatalf("passwords dont match!: (%s) / (%s)", password, resp.Data["password"].(string))
 	}
 
 	// verify that rotation_period is only required when creating

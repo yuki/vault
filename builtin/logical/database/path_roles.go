@@ -353,29 +353,40 @@ func (b *databaseBackend) pathRoleCreateUpdate(ctx context.Context, req *logical
 	if role.StaticAccount != nil {
 		// in create/update of static accounts, we only care if the operation
 		// err'd , and this call does not return credentials
-		lvr, err := b.createUpdateStaticAccount(ctx, req.Storage, name, role, createRole)
-		if err != nil {
-			return nil, err
-		}
 
-		// TODO need to check that we're only updating the revocation statements or rotation period
-		if b.credRotationQueue != nil {
-			// In case this is an update, remove any previous version of the item from the queue
-			if _, err := b.credRotationQueue.PopItemByKey(name); err != nil {
-				if _, ok := err.(*queue.ErrItemNotFound); !ok {
-					return nil, err
-				}
-			}
+		// lvr represents the roles' LastVaultRotation
+		lvr := role.StaticAccount.LastVaultRotation
 
-			// Add their rotation to the queue
-			if err := b.credRotationQueue.PushItem(&queue.Item{
-				Key: name,
-				// Value may be WAL ID if it exists
-				Priority: lvr.Add(role.StaticAccount.RotationPeriod).Unix(),
-			}); err != nil {
-				// TODO rollback?
+		// only call createUpdateStaticAccount if we're creating the role for the
+		// first time
+		if req.Operation == logical.CreateOperation {
+			lvr, err = b.createUpdateStaticAccount(ctx, req.Storage, name, role, createRole)
+			if err != nil {
 				return nil, err
 			}
+		}
+
+		// Re-init queue if it was invalidated
+		b.Lock()
+		if b.credRotationQueue == nil {
+			b.initQueue(req.Storage)
+		}
+		b.Unlock()
+
+		// In case this is an update, remove any previous version of the item from the queue
+		if _, err := b.credRotationQueue.PopItemByKey(name); err != nil {
+			if _, ok := err.(*queue.ErrItemNotFound); !ok {
+				return nil, err
+			}
+		}
+
+		// Add their rotation to the queue
+		if err := b.credRotationQueue.PushItem(&queue.Item{
+			Key: name,
+			// Value may be WAL ID if it exists
+			Priority: lvr.Add(role.StaticAccount.RotationPeriod).Unix(),
+		}); err != nil {
+			return nil, err
 		}
 	}
 	// END create/update static account
