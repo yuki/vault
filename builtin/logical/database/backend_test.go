@@ -1391,12 +1391,10 @@ func TestBackend_PeriodicFunc(t *testing.T) {
 	}
 	defer b.Cleanup(context.Background())
 
+	time.Sleep(1 * time.Second)
 	bd := b.(*databaseBackend)
 	if bd.credRotationQueue == nil {
 		t.Fatal("database backend had no credential rotation queue")
-	}
-	if bd.Backend.PeriodicFunc == nil {
-		t.Fatal("expected database backend to have PeriodicFunc")
 	}
 
 	// configure backend, add item and confirm length
@@ -1479,28 +1477,6 @@ func TestBackend_PeriodicFunc(t *testing.T) {
 	// periodic function ticks
 	time.Sleep(7 * time.Second)
 
-	// manually tick the periodicFunc
-	ticker := time.NewTicker(60 * time.Second)
-	quit := make(chan struct{})
-	// quit the go-routine
-	defer func() {
-		close(quit)
-	}()
-	go func() {
-		//periodic req
-		prReq := &logical.Request{
-			Storage: config.StorageView,
-		}
-		for {
-			select {
-			case <-ticker.C:
-				bd.PeriodicFunc(context.Background(), prReq)
-			case <-quit:
-				ticker.Stop()
-				return
-			}
-		}
-	}()
 	// sleep 75 to make sure the periodic func has time to actually run
 	time.Sleep(75 * time.Second)
 	pws = capturePasswords(t, b, config, testCases, pws)

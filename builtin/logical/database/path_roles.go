@@ -367,11 +367,11 @@ func (b *databaseBackend) pathRoleCreateUpdate(ctx context.Context, req *logical
 		}
 
 		// Re-init queue if it was invalidated
-		b.Lock()
-		if b.credRotationQueue == nil {
-			b.initQueue(req.Storage)
-		}
-		b.Unlock()
+		// b.Lock()
+		// if b.credRotationQueue == nil {
+		// 	b.initQueue(req.Storage)
+		// }
+		// b.Unlock()
 
 		// In case this is an update, remove any previous version of the item from the queue
 		if _, err := b.credRotationQueue.PopItemByKey(name); err != nil {

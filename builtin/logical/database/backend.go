@@ -20,8 +20,13 @@ import (
 	"github.com/hashicorp/vault/plugins/helper/database/dbutil"
 )
 
-const databaseConfigPath = "database/config/"
-const databaseRolePath = "role/"
+const (
+	databaseConfigPath = "database/config/"
+	databaseRolePath   = "role/"
+
+	// interval to check the queue for items needing rotation
+	QueueTickInterval = 5 * time.Second
+)
 
 type dbPluginInstance struct {
 	sync.RWMutex
@@ -49,6 +54,9 @@ func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend,
 	if err := b.Setup(ctx, conf); err != nil {
 		return nil, err
 	}
+
+	// load queue and kickoff new periodic ticker
+	go b.initQueue(ctx, conf)
 	return b, nil
 }
 
@@ -89,80 +97,7 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 	b.logger = conf.Logger
 	b.connections = make(map[string]*dbPluginInstance)
 
-	replicationState := conf.System.ReplicationState()
-	if (conf.System.LocalMount() || !replicationState.HasState(consts.ReplicationPerformanceSecondary)) &&
-		!replicationState.HasState(consts.ReplicationDRSecondary) &&
-		!replicationState.HasState(consts.ReplicationPerformanceStandby) {
-
-		b.initQueue(conf.StorageView)
-
-		b.Backend.PeriodicFunc = func(ctx context.Context, req *logical.Request) error {
-			// Re-init queue if it was invalidated
-			b.Lock()
-			if b.credRotationQueue == nil {
-				b.initQueue(req.Storage)
-			}
-			b.Unlock()
-
-			// This will loop until either:
-			// - The queue of passwords needing rotation is completely empty.
-			// - It encounters the first password not yet needing rotation.
-			for {
-				item, err := b.credRotationQueue.PopItem()
-				if err != nil {
-					if err == queue.ErrEmpty {
-						return nil
-					}
-					return err
-				}
-
-				role, err := b.Role(ctx, req.Storage, item.Key)
-				if err != nil {
-					b.logger.Warn(fmt.Sprintf("unable load role (%s)", item.Key), "error", err)
-					continue
-				}
-				if role == nil {
-					b.logger.Warn(fmt.Sprintf("role (%s) not found", item.Key), "error", err)
-					continue
-				}
-
-				if time.Now().Unix() > item.Priority {
-					// We've found our first item not in need of rotation
-
-					// lvr is the roles' last vault rotation
-					lvr, err := b.createUpdateStaticAccount(ctx, req.Storage, item.Key, role, false)
-					if err != nil {
-						b.logger.Warn("unable rotate credentials in periodic function", "error", err)
-						// add the item to the re-queue slice
-						newItem := queue.Item{
-							Key:      item.Key,
-							Priority: item.Priority + 10,
-						}
-						if err := b.credRotationQueue.PushItem(&newItem); err != nil {
-							b.logger.Warn("unable to push item on to queue", "error", err)
-						}
-						// go to next item
-						continue
-					}
-
-					nextRotation := lvr.Add(role.StaticAccount.RotationPeriod)
-					newItem := queue.Item{
-						Key:      item.Key,
-						Priority: nextRotation.Unix(),
-					}
-					if err := b.credRotationQueue.PushItem(&newItem); err != nil {
-						b.logger.Warn("unable to push item on to queue", "error", err)
-					}
-				} else {
-					// highest priority item does not need rotation, so we push it back on
-					// the queue and break the loop
-					b.credRotationQueue.PushItem(item)
-					break
-				}
-			}
-			return nil
-		}
-	}
+	b.shutdownCh = make(chan struct{})
 
 	return &b
 }
@@ -175,6 +110,9 @@ type databaseBackend struct {
 	sync.RWMutex
 	credRotationQueue queue.PriorityQueue
 	cancelQueue       context.CancelFunc
+
+	// channel used to shut down the ticker
+	shutdownCh chan struct{}
 }
 
 func (b *databaseBackend) DatabaseConfig(ctx context.Context, s logical.Storage, name string) (*DatabaseConfig, error) {
@@ -316,15 +254,39 @@ func (b *databaseBackend) GetConnection(ctx context.Context, s logical.Storage, 
 	return db, nil
 }
 
-// initQueue creates a new priority queue and starts a cancellable goroutine
-// to load existing static roles.
+// initQueue preforms the necessary checks and initializations needed to preform
+// automatic credential rotation for roles associated with static accounts. This
+// method verifies if a queue is needed (primary, non-local mount), and if so
+// initializes the queue and launches a go-routine to periodically invoke a
+// method to preform the rotations.
 //
-// This method is should not be called concurrently.
-func (b *databaseBackend) initQueue(s logical.Storage) {
-	b.credRotationQueue = queue.NewTimeQueue()
-	ctx, cancel := context.WithCancel(context.Background())
-	b.cancelQueue = cancel
-	go b.populateQueue(ctx, s)
+// initQueue is invoked in the Factory method, but does most of it's work inside
+// a go-routine, and does not wait for success or failure of it's tasks before
+// returning. This is to avoid blocking the mount process while loading and
+// evaluating existing roles, etc.
+func (b *databaseBackend) initQueue(ctx context.Context, conf *logical.BackendConfig) {
+	// verify this mount is on the primary server, or is a local mount. If not, do
+	// not create a queue or launch a ticker
+	replicationState := conf.System.ReplicationState()
+	if (conf.System.LocalMount() || !replicationState.HasState(consts.ReplicationPerformanceSecondary)) &&
+		!replicationState.HasState(consts.ReplicationDRSecondary) &&
+		!replicationState.HasState(consts.ReplicationPerformanceStandby) {
+		b.Logger().Info("backed is running on primary server or is a local mount, initializing database rotation queue")
+
+		if b.credRotationQueue == nil {
+			b.credRotationQueue = queue.NewTimeQueue()
+		}
+
+		//
+		// read, process WAL logs
+		//
+
+		ctx, cancel := context.WithCancel(context.Background())
+		b.cancelQueue = cancel
+		b.populateQueue(ctx, conf.StorageView)
+		// launch ticker
+		go b.runTicker(ctx, conf.StorageView)
+	}
 }
 
 // invalidateQueue cancels any background queue loading and destroys the queue.
@@ -336,6 +298,9 @@ func (b *databaseBackend) invalidateQueue() {
 		b.cancelQueue()
 	}
 	b.credRotationQueue = nil
+
+	// shut down the periodic ticker
+	close(b.shutdownCh)
 }
 
 // ClearConnection closes the database connection and
@@ -383,6 +348,8 @@ func (b *databaseBackend) clean(ctx context.Context) {
 	// invalidateQueue acquires it's own lock
 	b.invalidateQueue()
 
+	// close down ticker
+
 	b.Lock()
 	defer b.Unlock()
 
@@ -404,7 +371,6 @@ the "database/config/" path.
 // populate queue loads the priority queue with existing static accounts.
 func (b *databaseBackend) populateQueue(ctx context.Context, s logical.Storage) {
 	log := b.Logger()
-
 	log.Info("restoring role rotation queue")
 
 	roles, err := s.List(ctx, "role/")
@@ -438,4 +404,23 @@ func (b *databaseBackend) populateQueue(ctx context.Context, s logical.Storage) 
 		}
 	}
 	log.Info("successfully restored role rotation queue")
+}
+
+// runTicker kicks off a periodic ticker that invoke the automatic credential
+// rotation method at a determined interval
+func (b *databaseBackend) runTicker(ctx context.Context, s logical.Storage) {
+	b.logger.Info("starting periodic ticker")
+	tick := time.NewTicker(QueueTickInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-tick.C:
+			b.rotateCredentials(ctx, s)
+
+		case <-b.shutdownCh:
+			b.logger.Info("stopping periodic ticker")
+			return
+		}
+	}
+	return
 }
