@@ -64,11 +64,6 @@ func Find(name string) (v *View) {
 // Register begins collecting data for the given views.
 // Once a view is registered, it reports data to the registered exporters.
 func Register(views ...*View) error {
-	for _, v := range views {
-		if err := v.canonicalize(); err != nil {
-			return err
-		}
-	}
 	req := &registerViewReq{
 		views: views,
 		err:   make(chan error),
@@ -107,7 +102,7 @@ func RetrieveData(viewName string) ([]*Row, error) {
 	return resp.rows, resp.err
 }
 
-func record(tags *tag.Map, ms interface{}, attachments map[string]string) {
+func record(tags *tag.Map, ms interface{}, attachments map[string]interface{}) {
 	req := &recordReq{
 		tm:          tags,
 		ms:          ms.([]stats.Measurement),

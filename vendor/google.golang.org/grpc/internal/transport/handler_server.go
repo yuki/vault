@@ -24,6 +24,7 @@
 package transport
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -34,7 +35,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -176,17 +176,11 @@ func (a strAddr) String() string { return string(a) }
 
 // do runs fn in the ServeHTTP goroutine.
 func (ht *serverHandlerTransport) do(fn func()) error {
-	// Avoid a panic writing to closed channel. Imperfect but maybe good enough.
 	select {
 	case <-ht.closedCh:
 		return ErrConnClosing
-	default:
-		select {
-		case ht.writes <- fn:
-			return nil
-		case <-ht.closedCh:
-			return ErrConnClosing
-		}
+	case ht.writes <- fn:
+		return nil
 	}
 }
 
@@ -237,7 +231,6 @@ func (ht *serverHandlerTransport) WriteStatus(s *Stream, st *status.Status) erro
 		if ht.stats != nil {
 			ht.stats.HandleRPC(s.Context(), &stats.OutTrailer{})
 		}
-		close(ht.writes)
 	}
 	ht.Close()
 	return err
@@ -307,7 +300,7 @@ func (ht *serverHandlerTransport) WriteHeader(s *Stream, md metadata.MD) error {
 func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), traceCtx func(context.Context, string) context.Context) {
 	// With this transport type there will be exactly 1 stream: this HTTP request.
 
-	ctx := contextFromRequest(ht.req)
+	ctx := ht.req.Context()
 	var cancel context.CancelFunc
 	if ht.timeoutSet {
 		ctx, cancel = context.WithTimeout(ctx, ht.timeout)
@@ -407,10 +400,7 @@ func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), trace
 func (ht *serverHandlerTransport) runStream() {
 	for {
 		select {
-		case fn, ok := <-ht.writes:
-			if !ok {
-				return
-			}
+		case fn := <-ht.writes:
 			fn()
 		case <-ht.closedCh:
 			return
