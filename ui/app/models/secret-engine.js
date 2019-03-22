@@ -7,7 +7,8 @@ const { attr } = DS;
 
 //identity will be managed separately and the inclusion
 //of the system backend is an implementation detail
-const LIST_EXCLUDED_BACKENDS = ['system', 'identity'];
+// YUKI: added "cubbyhole" to exclude list
+const LIST_EXCLUDED_BACKENDS = ['system', 'identity', 'cubbyhole'];
 
 export default DS.Model.extend({
   path: attr('string'),

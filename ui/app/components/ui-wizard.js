@@ -15,7 +15,9 @@ export default Component.extend({
   currentState: alias('wizard.currentState'),
   featureState: alias('wizard.featureState'),
   featureComponent: alias('wizard.featureComponent'),
-  tutorialComponent: alias('wizard.tutorialComponent'),
+  // YUKI
+  //tutorialComponent: alias('wizard.tutorialComponent'),
+  // /YUKI
   componentState: alias('wizard.componentState'),
   nextFeature: alias('wizard.nextFeature'),
   nextStep: alias('wizard.nextStep'),

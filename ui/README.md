@@ -1,5 +1,11 @@
 # vault
 
+----
+
+**Please note**: This is a forked project from the original [Vault](https://github.com/hashicorp/vault). The modifications for the UI are to disable some unnecesary options for a normal user and added a Markdown editor.
+
+----
+
 This README outlines the details of collaborating on this Ember application.
 A short introduction of this app could easily go here.
 

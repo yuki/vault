@@ -52,6 +52,7 @@
             </li>
           {{/if}}
         {{/if}}
+        {{!-- YUKI: disable options
         <li class="action">
           <CopyButton @clipboardText={{auth.currentToken}} class="link button" @buttonType="button" @success={{action (set-flash-message 'Token copied!')}}>
             Copy token
@@ -62,6 +63,7 @@
             Restart guide
           </button>
         </li>
+        / YUKI --}}
         <li class="action">
           {{#link-to "vault.cluster.logout" activeClusterName id="logout" invokeAction=onLinkClick}}
             Sign out
