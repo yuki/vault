@@ -47,6 +47,22 @@ module.exports = function(defaults) {
     },
   });
 
+  // YUKI
+  app.import('vendor/irontec/irontec.css');
+  app.import('vendor/irontec/irontec.js');
+  app.import('vendor/irontec/bootstrap.min.js');
+  app.import('vendor/irontec/bootstrap.min.css');
+  app.import('vendor/irontec/jquery-ui.min.js');
+
+  app.import('vendor/irontec/font-awesome-v5.8.1.css');
+
+  app.import('vendor/irontec/fancytree-2.30.2/ui.fancytree.css');
+  app.import('vendor/irontec/fancytree-2.30.2/jquery.fancytree.js');
+  app.import('vendor/irontec/fancytree-2.30.2/jquery.fancytree.filter.js');
+  app.import('vendor/irontec/fancytree-2.30.2/jquery.fancytree.glyph.js');
+
+  // / YUKI
+
   app.import('vendor/string-includes.js');
   app.import('node_modules/string.prototype.endswith/endswith.js');
   app.import('node_modules/string.prototype.startswith/startswith.js');
@@ -58,6 +74,7 @@ module.exports = function(defaults) {
   app.import('node_modules/text-encoder-lite/index.js');
 
   app.import('app/styles/bulma/bulma-radio-checkbox.css');
+
   // Use `app.import` to add additional libraries to the generated
   // output files.
   //

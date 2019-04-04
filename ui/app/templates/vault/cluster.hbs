@@ -3,6 +3,9 @@
     as |Nav|>
     <Nav.home>
       <HomeLink @class="navbar-item has-text-white has-current-color-fill">
+        {{!-- YUKI --}}
+            <img style="" src="/ui/irontec-logo-white.svg" />
+        {{!-- /YUKI --}}
         {{partial 'svg/vault-logo'}}
       </HomeLink>
     </Nav.home>
@@ -110,9 +113,29 @@
   <UiWizard>
     <section class="section">
       <div class="container is-widescreen">
-        <TokenExpireWarning @expirationDate={{auth.tokenExpirationDate}}>
-          {{outlet}}
-        </TokenExpireWarning>
+
+        {{!-- YUKI --}}
+        <div class="columns">
+          {{#menu-sidebar title="Secrets Tree" class="is-3"}}
+            <div class="secrets-tree">
+              <p>
+                <label>Filter:</label>
+                <input name="search" placeholder="Filter..." autocomplete="off">
+                <button id="btnResetSearch">&times;</button>
+              </p>
+              <span id="matches"></span>
+              <div id="tree"></div>
+            </div>
+          {{/menu-sidebar}}
+
+          <div class="column is-9">
+            <TokenExpireWarning @expirationDate={{auth.tokenExpirationDate}}>
+              {{outlet}}
+            </TokenExpireWarning>
+          </div>
+        </div>
+        {{!-- / YUKI --}}
+
       </div>
     </section>
   </UiWizard>
